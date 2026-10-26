@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+.pdf-page {
+  max-width: 100%;
+}
+
+.pdf-page canvas {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+}
