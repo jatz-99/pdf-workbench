@@ -1,0 +1,48 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 439 >>
+stream
+BT /F1 12 Tf
+1 0 0 1 72 700 Tm (Name) Tj
+1 0 0 1 220 700 Tm (Qty) Tj
+1 0 0 1 330 700 Tm (Price) Tj
+1 0 0 1 72 678 Tm (Apple) Tj
+1 0 0 1 220 678 Tm (3) Tj
+1 0 0 1 330 678 Tm (1.20) Tj
+1 0 0 1 72 656 Tm (Banana) Tj
+1 0 0 1 220 656 Tm (12) Tj
+1 0 0 1 330 656 Tm (0.50) Tj
+1 0 0 1 72 634 Tm (Cherry) Tj
+1 0 0 1 220 634 Tm (7) Tj
+1 0 0 1 330 634 Tm (4.75) Tj
+1 0 0 1 72 612 Tm (Date) Tj
+1 0 0 1 220 612 Tm (5) Tj
+1 0 0 1 330 612 Tm (2.10) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000731 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+801
+%%EOF

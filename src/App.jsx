@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -11,7 +11,6 @@ function App() {
   // PDF state
   const [pdfFile, setPdfFile] = useState(null);
   const [documentId, setDocumentId] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -28,30 +27,6 @@ function App() {
   const [extractionMessage, setExtractionMessage] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
   const [result, setResult] = useState(null);
-
-  const pdfUrlRef = useRef(null);
-
-  // Create and clean up the PDF object URL
-  useEffect(() => {
-    if (!pdfFile) {
-      setPdfUrl(null);
-      pdfUrlRef.current = null;
-      return;
-    }
-
-    const url = URL.createObjectURL(pdfFile);
-
-    pdfUrlRef.current = url;
-    setPdfUrl(url);
-
-    return () => {
-      URL.revokeObjectURL(url);
-
-      if (pdfUrlRef.current === url) {
-        pdfUrlRef.current = null;
-      }
-    };
-  }, [pdfFile]);
 
   // Handle PDF upload
   async function handleFileChange(event) {
@@ -322,10 +297,13 @@ function App() {
       const data = await response.json();
 
       setResult(data);
+      const isEmpty =
+        !data.detected_type ||
+        (Array.isArray(data.data) && data.data.length === 0);
       setExtractionMessage(
-        data.detected_type
-          ? `Detected ${data.detected_type}.`
-          : "No content found in the selected area."
+        isEmpty
+          ? `No ${data.detected_type ?? "content"} found in the selected area.`
+          : `Detected ${data.detected_type}.`
       );
     } catch (error) {
       console.error("Extraction error:", error);
@@ -482,7 +460,7 @@ function App() {
                   {loadError}
                 </p>
               </div>
-            ) : !pdfUrl ? (
+            ) : !pdfFile ? (
               <div className="m-auto max-w-md text-center">
                 <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800 text-2xl">
                   PDF
@@ -500,7 +478,7 @@ function App() {
             ) : (
               <div className="h-fit">
                 <Document
-                  file={pdfUrl}
+                  file={pdfFile}
                   onLoadSuccess={onDocumentLoadSuccess}
                   onLoadError={onDocumentLoadError}
                   loading={
@@ -528,7 +506,8 @@ function App() {
                       className="pdf-page"
                     />
 
-                    {/* Selection overlay */}
+                    {/* Selection overlay (only in region mode) */}
+                    {extractionScope === "region" && (
                     <div
                       className="absolute inset-0 z-10 cursor-crosshair"
                       onMouseDown={handleMouseDown}
@@ -553,6 +532,7 @@ function App() {
                           />
                         )}
                     </div>
+                    )}
                   </div>
                 </Document>
               </div>
@@ -569,9 +549,11 @@ function App() {
               </span>
 
               <span>
-                {isDrawing
-                  ? "Drawing selection..."
-                  : "Drag across the PDF to select a region"}
+                {extractionScope !== "region"
+                  ? "Entire document mode"
+                  : isDrawing
+                    ? "Drawing selection..."
+                    : "Drag across the PDF to select a region"}
               </span>
             </div>
           )}
