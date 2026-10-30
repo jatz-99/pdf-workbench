@@ -1,0 +1,18 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+      DOCUMENT_TTL_MINUTES: ${DOCUMENT_TTL_MINUTES:-120}
+    volumes:
+      - documents:/data
+
+  web:
+    build: .
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  documents:

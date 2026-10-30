@@ -1,11 +1,12 @@
 @import "tailwindcss";
 
-.pdf-page {
-  max-width: 100%;
-}
-
 .pdf-page canvas {
   display: block;
-  max-width: 100%;
-  height: auto !important;
+}
+
+html,
+body {
+  background-color: #0f172a; /* slate-900, matches the app background */
+  color-scheme: dark;
+
 }
