@@ -82,6 +82,11 @@ export default function ResultPanel({ result, onClear }) {
 
       {result.detected_type === "table" && (
         <>
+          {result.ocr && (
+            <p className="mt-3 text-xs text-amber-300">
+              This page is a scan, so the table was rebuilt from its ruled grid and read with OCR. Check the cells for mistakes.
+            </p>
+          )}
           <div className="mt-4 space-y-4 overflow-auto">
             {result.data.map((table, tableIndex) => (
               <div key={tableIndex}>

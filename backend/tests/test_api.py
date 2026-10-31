@@ -314,3 +314,95 @@ def test_upload_owner_only_protection_needs_no_password(client):
     response = post_upload(client, encrypted_pdf("", owner_password="owner"))
     assert response.status_code == 200
     assert response.json()["pages"] == 2
+
+
+def make_drawn_pdf(drawing: str, text: str = "") -> bytes:
+    """One 612x792 page: `drawing` is raw PDF graphics operators, `text` an optional Helvetica line."""
+    stream = drawing + (f" BT /F1 18 Tf 72 740 Td ({text}) Tj ET" if text else "")
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        "/Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+        f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n{body}\nendobj\n".encode()
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return out
+
+
+def test_smart_keeps_text_on_page_with_decorative_vector_background(client, upload):
+    # Touching grey blocks cover most of the page, like a certificate or scorecard background
+    blocks = " ".join(f"0.9 g {x} 20 100 750 re f" for x in range(20, 600, 100))
+    doc = upload(make_drawn_pdf(blocks, "Certificate of completion awarded to Jane"))["document_id"]
+    data = extract(client, doc, extraction_type="smart").json()
+    assert data["detected_type"] == "text" and "Certificate" in data["data"]
+
+
+def test_small_vector_logo_is_found_and_extracted(client, upload):
+    # A 20pt logo made of tiny filled curves, as in bank statements
+    curves = " ".join(
+        f"{x} {y} m {x + 2} {y} {x + 4} {y + 1} {x + 4} {y + 3} c "
+        f"{x + 4} {y + 5} {x + 2} {y + 6} {x} {y + 6} c h f"
+        for x, y in ((100 + 4 * i, 600 + 3 * (i % 4)) for i in range(6))
+    )
+    doc = upload(make_drawn_pdf(curves, "Transfer successful, reference 12345"))["document_id"]
+    logo = dict(extraction_scope="region", x_percent=0.12, y_percent=0.2, width_percent=0.1, height_percent=0.08)
+    assert len(extract(client, doc, extraction_type="images", **logo).json()["data"]) == 1
+    assert extract(client, doc, extraction_type="smart", **logo).json()["detected_type"] == "image"
+    # Whole page: the text still wins over the little logo
+    assert extract(client, doc, extraction_type="smart").json()["detected_type"] == "text"
+
+
+def test_text_ligature_characters_are_expanded():
+    assert main.clean_text("ﬁnal oﬃce ﬂow") == "final office flow"
+
+
+def make_scanned_table_pdf(rows: list[list[str]], ruled: bool = True) -> bytes:
+    """A page that is one picture of a ruled table (with a heading above it), no real text."""
+    from PIL import ImageDraw, ImageFont
+
+    page = Image.new("RGB", (1240, 1754), "white")
+    draw = ImageDraw.Draw(page)
+    font = ImageFont.load_default(size=40)
+    draw.text((100, 100), "Quarterly report", fill="black", font=font)
+    left, top, cell_w, cell_h = 100, 250, 320, 90
+    if ruled:
+        for r in range(len(rows) + 1):
+            draw.line((left, top + r * cell_h, left + len(rows[0]) * cell_w, top + r * cell_h), fill="black", width=3)
+        for c in range(len(rows[0]) + 1):
+            draw.line((left + c * cell_w, top, left + c * cell_w, top + len(rows) * cell_h), fill="black", width=3)
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            draw.text((left + c * cell_w + 20, top + r * cell_h + 22), value, fill="black", font=font)
+    out = io.BytesIO()
+    page.save(out, format="PDF", resolution=150)
+    return out.getvalue()
+
+
+@needs_ocr
+def test_scanned_ruled_table_is_extracted_as_table(client, upload):
+    rows = [["Item", "Qty", "Price"], ["Apples", "12", "350"], ["Pears", "7", "425"]]
+    doc = upload(make_scanned_table_pdf(rows))["document_id"]
+    for kind in ("smart", "tables"):
+        data = extract(client, doc, extraction_type=kind).json()
+        assert data["detected_type"] == "table" and data.get("ocr") is True
+        assert data["data"] == [rows]
+
+
+@needs_ocr
+def test_scanned_page_without_grid_stays_text(client, upload):
+    rows = [["Item", "Qty", "Price"], ["Apples", "12", "3.50"], ["Pears", "7", "4.25"]]
+    doc = upload(make_scanned_table_pdf(rows, ruled=False))["document_id"]
+    data = extract(client, doc, extraction_type="smart").json()
+    assert data["detected_type"] == "text" and "Apples" in data["data"]
+    assert extract(client, doc, extraction_type="tables").json()["data"] == []

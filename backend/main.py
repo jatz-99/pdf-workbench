@@ -19,6 +19,7 @@ from openpyxl import Workbook  # type: ignore[reportMissingImports]
 
 import ocr
 import ops
+import scan_tables
 import storage
 
 MAX_UPLOAD_BYTES = int(float(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024)
@@ -105,6 +106,14 @@ IMAGE_DOMINANCE = 0.5  # images must fill this much of a selection to win over i
 SMART_OCR_MIN_CONFIDENCE = 60  # smart mode only trusts OCR text this reliable...
 SMART_OCR_MIN_WORDS = 3  # ...and this long, so photos are not turned into gibberish
 SMART_OCR_MIN_ALPHA = 0.6  # ...and mostly letters, so chart axis numbers are not read as text
+SMART_MIN_TEXT_CHARS = 20  # with this much real text, only embedded images (not vector shapes) can win
+SMALL_FIGURE_MIN_SIZE = 8  # logos/icons drawn as vector curves may be this small (pt)...
+SMALL_FIGURE_CURVE_SHARE = 0.8  # ...if nearly all their shapes are curves, unlike table rules
+SMALL_FIGURE_PAD = 3
+LIGATURES = str.maketrans({
+    "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi", "\ufb04": "ffl",
+    "\ufb05": "st", "\ufb06": "st",
+})
 
 
 def bbox_overlap(a: tuple, b: tuple) -> bool:
@@ -292,13 +301,23 @@ def find_vector_figures(page) -> list:
     boxes = [[o["x0"], o["top"], o["x1"], o["bottom"], 1] for o in shapes]
     boxes = cluster_boxes(boxes, gap=6)
 
+    curve_centres = [
+        ((o["x0"] + o["x1"]) / 2, (o["top"] + o["bottom"]) / 2)
+        for o in shapes if o["object_type"] == "curve"
+    ]
     table_boxes = [t.bbox for t in detect_tables(page)]
     figures = []
     for x0, top, x1, bottom, count in boxes:
-        if count < 5 or (x1 - x0) < 40 or (bottom - top) < 40:
+        width, height = x1 - x0, bottom - top
+        large = count >= 5 and width >= 40 and height >= 40
+        small_logo = False
+        if not large and count >= 5 and width >= SMALL_FIGURE_MIN_SIZE and height >= SMALL_FIGURE_MIN_SIZE:
+            curves = sum(1 for cx, cy in curve_centres if x0 <= cx <= x1 and top <= cy <= bottom)
+            small_logo = curves / count >= SMALL_FIGURE_CURVE_SHARE
+        if not (large or small_logo):
             continue
-        # Include nearby axis labels and legends in the picture
-        pad = 30
+        # Include nearby axis labels and legends in the picture (tight crop for small logos)
+        pad = 30 if large else SMALL_FIGURE_PAD
         figure = (max(x0 - pad, page.bbox[0]), max(top - pad, page.bbox[1]),
                   min(x1 + pad, page.bbox[2]), min(bottom + pad, page.bbox[3]))
         if any(bbox_overlap(figure, t) for t in table_boxes):
@@ -317,18 +336,31 @@ def covers(outer: tuple, inner: tuple, tolerance: float = 1.0) -> bool:
             and outer[2] + tolerance >= inner[2] and outer[3] + tolerance >= inner[3])
 
 
-def visual_coverage(page, bbox: tuple) -> float:
-    """Fraction of the selection covered by images and vector figures."""
+def covered_fraction(bbox: tuple, boxes: list) -> float:
+    """Fraction of the selection covered by the given boxes."""
     area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
     if area <= 0:
         return 0.0
-    boxes = [(i["x0"], i["top"], i["x1"], i["bottom"]) for i in page.images] + find_vector_figures(page)
     covered = 0.0
     for box in boxes:
         if bbox_overlap(bbox, box):
             x0, top, x1, bottom = intersect(bbox, box)
             covered += (x1 - x0) * (bottom - top)
     return min(covered / area, 1.0)
+
+
+def image_boxes(page) -> list:
+    return [(i["x0"], i["top"], i["x1"], i["bottom"]) for i in page.images]
+
+
+def image_coverage(page, bbox: tuple) -> float:
+    """Fraction of the selection covered by embedded images."""
+    return covered_fraction(bbox, image_boxes(page))
+
+
+def visual_coverage(page, bbox: tuple) -> float:
+    """Fraction of the selection covered by images and vector figures."""
+    return covered_fraction(bbox, image_boxes(page) + find_vector_figures(page))
 
 
 def extract_images(page, bbox: tuple[float, float, float, float]) -> list[str]:
@@ -457,7 +489,8 @@ def crop_chars(page, bbox: tuple):
 
 
 def clean_text(text: str) -> str:
-    text = re.sub(r"[ \t]+\n", "\n", text or "")
+    text = (text or "").translate(LIGATURES)
+    text = re.sub(r"[ \t]+\n", "\n", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
@@ -467,16 +500,9 @@ def page_text(page, bbox: tuple) -> str:
 
 def is_scanned(page, bbox: tuple) -> bool:
     """True when the selection has no real text but is mostly covered by page images."""
-    area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
-    if area <= 0 or page_text(page, bbox):
+    if page_text(page, bbox):
         return False
-    covered = 0.0
-    for image in page.images:
-        box = (image["x0"], image["top"], image["x1"], image["bottom"])
-        if bbox_overlap(bbox, box):
-            x0, top, x1, bottom = intersect(bbox, box)
-            covered += (x1 - x0) * (bottom - top)
-    return covered / area >= IMAGE_DOMINANCE
+    return image_coverage(page, bbox) >= IMAGE_DOMINANCE
 
 
 def looks_like_prose(text: str) -> bool:
@@ -496,10 +522,21 @@ def ocr_page_text(page, bbox: tuple) -> tuple[str, float, int]:
     return clean_text(text), confidence, words
 
 
+def scanned_tables(page, bbox: tuple) -> list:
+    """Tables in a scanned selection: ruled grid found in the rendered image, cells read with OCR."""
+    px0, ptop, px1, pbottom = page.bbox
+    x0, top, x1, bottom = max(bbox[0], px0), max(bbox[1], ptop), min(bbox[2], px1), min(bbox[3], pbottom)
+    if x1 - x0 < 1 or bottom - top < 1:
+        return []
+    rendered = page.crop((x0, top, x1, bottom)).to_image(resolution=scan_tables.DPI).original
+    tables = [clean_table(rows) for rows in scan_tables.read_tables(rendered)]
+    return [rows for rows in tables if is_real_table(rows)]
+
+
 def extract_single_page(page, request, bbox: tuple) -> dict:
     """Run one extraction on one page. Returns {"detected_type", "data", ...}."""
     kind = request.extraction_type
-    scanned = kind in ("text", "smart") and is_scanned(page, bbox)
+    scanned = kind in ("text", "smart", "tables") and is_scanned(page, bbox)
     ocr_ready = scanned and request.use_ocr and ocr.available()
     ocr_result = ocr_page_text(page, bbox) if ocr_ready and kind == "text" else None
 
@@ -508,21 +545,31 @@ def extract_single_page(page, request, bbox: tuple) -> dict:
         if table_data:
             return {"detected_type": "table", "data": table_data}
         if ocr_ready:
+            tables = scanned_tables(page, bbox)
+            if tables:
+                return {"detected_type": "table", "data": tables, "ocr": True}
             text, confidence, words = ocr_page_text(page, bbox)
             if (confidence >= SMART_OCR_MIN_CONFIDENCE and words >= SMART_OCR_MIN_WORDS
                     and looks_like_prose(text)):
                 return {"detected_type": "text", "data": text, "ocr": True}
         # Text sitting next to a picture stays text unless the picture fills the selection
-        if not page_text(page, bbox) or visual_coverage(page, bbox) >= IMAGE_DOMINANCE:
+        # With plenty of real text, backgrounds/borders/logos drawn as vectors must not turn it into an image
+        text = page_text(page, bbox)
+        has_real_text = len("".join(text.split())) >= SMART_MIN_TEXT_CHARS
+        coverage = image_coverage(page, bbox) if has_real_text else visual_coverage(page, bbox)
+        if not text or coverage >= IMAGE_DOMINANCE:
             image_data = extract_images(page, bbox)
             if image_data:
                 return {"detected_type": "image", "data": image_data}
 
     if kind == "tables":
-        return {
-            "detected_type": "table",
-            "data": extract_tables(page, bbox, strict_borderless=request.extraction_scope == "region"),
-        }
+        tables = extract_tables(page, bbox, strict_borderless=request.extraction_scope == "region")
+        if tables:
+            return {"detected_type": "table", "data": tables}
+        if ocr_ready:
+            tables = scanned_tables(page, bbox)
+            return {"detected_type": "table", "data": tables, **({"ocr": True} if tables else {})}
+        return {"detected_type": "table", "data": []}
 
     if kind == "images":
         return {"detected_type": "image", "data": extract_images(page, bbox)}
@@ -530,6 +577,11 @@ def extract_single_page(page, request, bbox: tuple) -> dict:
     if ocr_result is not None:
         return {"detected_type": "text", "data": ocr_result[0], "ocr": True}
     result = {"detected_type": "text", "data": page_text(page, bbox)}
+    if "\ufffd" in result["data"] and request.use_ocr and ocr.available():
+        # The font has no Unicode mapping for some glyphs (e.g. "ti" ligatures); read the rendered page instead
+        text, _, words = ocr_page_text(page, bbox)
+        if words and "\ufffd" not in text:
+            return {"detected_type": "text", "data": text, "ocr": True}
     if scanned and not result["data"]:
         # Tell the client why nothing came back, so it can explain instead of showing a blank result
         result["scanned"] = True

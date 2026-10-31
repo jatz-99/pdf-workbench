@@ -309,7 +309,7 @@ function App() {
       setHistory((previous) => [entry, ...previous].slice(0, MAX_HISTORY));
       setExtractionMessage(
         data.ocr
-          ? "Detected text (OCR)."
+          ? `Detected ${data.detected_type} (OCR).`
           : isEmpty
           ? `No ${data.detected_type ?? "content"} found in the selected area.`
           : `Detected ${data.detected_type}.`
