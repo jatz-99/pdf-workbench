@@ -350,13 +350,17 @@ def covered_fraction(bbox: tuple, boxes: list) -> float:
     return min(covered / area, 1.0)
 
 
-def image_boxes(page) -> list:
-    return [(i["x0"], i["top"], i["x1"], i["bottom"]) for i in page.images]
+def image_boxes(page, ignore_backgrounds: bool = False) -> list:
+    boxes = [(i["x0"], i["top"], i["x1"], i["bottom"]) for i in page.images]
+    if ignore_backgrounds:
+        page_area = page.width * page.height
+        boxes = [b for b in boxes if (b[2] - b[0]) * (b[3] - b[1]) < BACKGROUND_FRACTION * page_area]
+    return boxes
 
 
-def image_coverage(page, bbox: tuple) -> float:
+def image_coverage(page, bbox: tuple, ignore_backgrounds: bool = False) -> float:
     """Fraction of the selection covered by embedded images."""
-    return covered_fraction(bbox, image_boxes(page))
+    return covered_fraction(bbox, image_boxes(page, ignore_backgrounds))
 
 
 def visual_coverage(page, bbox: tuple, ignore_backgrounds: bool = False) -> float:
@@ -562,7 +566,8 @@ def extract_single_page(page, request, bbox: tuple) -> dict:
         text = page_text(page, bbox)
         has_real_text = len("".join(text.split())) >= SMART_MIN_TEXT_CHARS or (bool(text) and looks_like_prose(text))
         coverage = (
-            image_coverage(page, bbox) if has_real_text
+            # A page-sized image behind real text is a watermark/letterhead, not a picture of the text
+            image_coverage(page, bbox, ignore_backgrounds=True) if has_real_text
             else visual_coverage(page, bbox, ignore_backgrounds=bool(text))
         )
         if not text or coverage >= IMAGE_DOMINANCE:

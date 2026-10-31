@@ -182,6 +182,28 @@ def test_smart_region_text_near_image_stays_text(client, upload):
     assert extract(client, doc, **on_picture).json()["detected_type"] == "image"
 
 
+def make_watermarked_pdf() -> bytes:
+    """Text on top of a page-sized background image (like a letterhead watermark)."""
+    picture = io.BytesIO()
+    Image.new("RGB", (612, 792), "#eeeeee").save(picture, format="PDF", resolution=72)
+    background = PdfReader(picture).pages[0]
+    text_page = PdfReader(io.BytesIO(make_pdf(["Hemoglobin 5.30 percent reference range"]))).pages[0]
+    background.merge_page(text_page)
+    writer = PdfWriter()
+    writer.add_page(background)
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+def test_smart_keeps_text_over_full_page_background_image(client, upload):
+    doc = upload(make_watermarked_pdf())["document_id"]
+    region = dict(extraction_scope="region", extraction_type="smart",
+                  x_percent=0.05, y_percent=0.05, width_percent=0.9, height_percent=0.2)
+    data = extract(client, doc, **region).json()
+    assert data["detected_type"] == "text" and "Hemoglobin" in data["data"]
+
+
 def test_ops_reorder(client, upload):
     doc = upload(make_pdf(["a", "b", "c"]))["document_id"]
     response = client.post(f"/document/{doc}/ops", json={"op": "reorder", "pages": [3, 1, 2]})
