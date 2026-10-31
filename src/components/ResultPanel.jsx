@@ -10,8 +10,38 @@ import {
 import { exportXlsx } from "../api";
 import { card, secondaryButton, smallButton } from "./ui";
 
-export default function ResultPanel({ result, onClear }) {
+const cellInput =
+  "w-full min-w-16 bg-transparent px-3 py-2 text-sm text-slate-200 outline-none focus:bg-slate-900 focus:ring-1 focus:ring-blue-500";
+
+export default function ResultPanel({ result, onChange, onClear }) {
   const [status, setStatus] = useState("");
+
+  const editTable = (tableIndex, update) =>
+    onChange(result.data.map((table, index) => (index === tableIndex ? update(table) : table)));
+
+  const editCell = (tableIndex, rowIndex, cellIndex, value) =>
+    editTable(tableIndex, (table) =>
+      table.map((row, r) =>
+        r === rowIndex ? row.map((cell, c) => (c === cellIndex ? value : cell)) : row
+      )
+    );
+
+  const addRow = (tableIndex) =>
+    editTable(tableIndex, (table) => [
+      ...table,
+      Array(Math.max(1, ...table.map((row) => row.length))).fill(""),
+    ]);
+
+  const removeRow = (tableIndex, rowIndex) =>
+    editTable(tableIndex, (table) => table.filter((_, r) => r !== rowIndex));
+
+  const addColumn = (tableIndex) =>
+    editTable(tableIndex, (table) => table.map((row) => [...row, ""]));
+
+  const removeColumn = (tableIndex) =>
+    editTable(tableIndex, (table) =>
+      table.map((row) => (row.length > 1 ? row.slice(0, -1) : row))
+    );
 
   async function copy(text) {
     setStatus((await copyToClipboard(text)) ? "Copied to clipboard." : "Copy failed.");
@@ -54,11 +84,12 @@ export default function ResultPanel({ result, onClear }) {
             </p>
           )}
           <textarea
-            readOnly
             value={result.data}
+            onChange={(event) => onChange(event.target.value)}
             aria-label="Extracted text"
-            className="mt-4 min-h-48 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm leading-6 text-slate-200 outline-none"
+            className="mt-4 min-h-48 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm leading-6 text-slate-200 outline-none focus:border-blue-500"
           />
+          <p className="mt-1 text-xs text-slate-500">You can edit this text before copying or downloading.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
@@ -98,14 +129,42 @@ export default function ResultPanel({ result, onClear }) {
                     {table.map((row, rowIndex) => (
                       <tr key={rowIndex}>
                         {row.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="border border-slate-700 px-3 py-2">
-                            {cell ?? ""}
+                          <td key={cellIndex} className="border border-slate-700 p-0">
+                            <input
+                              value={cell ?? ""}
+                              onChange={(event) =>
+                                editCell(tableIndex, rowIndex, cellIndex, event.target.value)
+                              }
+                              aria-label={`Table ${tableIndex + 1} row ${rowIndex + 1} column ${cellIndex + 1}`}
+                              className={cellInput}
+                            />
                           </td>
                         ))}
+                        <td className="w-8 pl-1">
+                          <button
+                            type="button"
+                            onClick={() => removeRow(tableIndex, rowIndex)}
+                            aria-label={`Delete row ${rowIndex + 1}`}
+                            className="text-slate-500 hover:text-red-400"
+                          >
+                            ×
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => addRow(tableIndex)} className={smallButton}>
+                    + Row
+                  </button>
+                  <button type="button" onClick={() => addColumn(tableIndex)} className={smallButton}>
+                    + Column
+                  </button>
+                  <button type="button" onClick={() => removeColumn(tableIndex)} className={smallButton}>
+                    − Column
+                  </button>
+                </div>
               </div>
             ))}
           </div>

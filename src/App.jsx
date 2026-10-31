@@ -332,6 +332,16 @@ function App() {
     setExtractionMessage("");
   }
 
+  // Keep user edits in the history entry so they survive switching between results
+  function updateResultData(data) {
+    setResult((previous) => (previous ? { ...previous, data } : previous));
+    setHistory((previous) =>
+      previous.map((entry) =>
+        entry.id === activeHistoryId ? { ...entry, result: { ...entry.result, data } } : entry
+      )
+    );
+  }
+
   function clearSelection() {
     setSelection(null);
     setExtractionMessage("");
@@ -507,7 +517,7 @@ function App() {
           />
 
           {result && (
-            <ResultPanel result={result} onClear={clearResult} />
+            <ResultPanel result={result} onChange={updateResultData} onClear={clearResult} />
           )}
 
           <HistoryPanel history={history} activeId={activeHistoryId} onSelect={selectHistoryEntry} />
