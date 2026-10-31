@@ -406,3 +406,13 @@ def test_scanned_page_without_grid_stays_text(client, upload):
     data = extract(client, doc, extraction_type="smart").json()
     assert data["detected_type"] == "text" and "Apples" in data["data"]
     assert extract(client, doc, extraction_type="tables").json()["data"] == []
+
+
+def test_smart_short_text_selection_on_vector_background_stays_text(client, upload):
+    blocks = " ".join(f"0.9 g {x} 20 100 750 re f" for x in range(20, 600, 100))
+    doc = upload(make_drawn_pdf(blocks, "Score card"))["document_id"]
+    # Tight box round the 10-character line (text sits at the top left, 72pt in, 740pt up)
+    line = dict(extraction_scope="region", extraction_type="smart",
+                x_percent=0.1, y_percent=0.055, width_percent=0.25, height_percent=0.04)
+    data = extract(client, doc, **line).json()
+    assert data["detected_type"] == "text" and "Score" in data["data"]

@@ -106,6 +106,7 @@ IMAGE_DOMINANCE = 0.5  # images must fill this much of a selection to win over i
 SMART_OCR_MIN_CONFIDENCE = 60  # smart mode only trusts OCR text this reliable...
 SMART_OCR_MIN_WORDS = 3  # ...and this long, so photos are not turned into gibberish
 SMART_OCR_MIN_ALPHA = 0.6  # ...and mostly letters, so chart axis numbers are not read as text
+BACKGROUND_FRACTION = 0.5  # a vector "figure" this large is a page background or table layout, not a chart
 SMART_MIN_TEXT_CHARS = 20  # with this much real text, only embedded images (not vector shapes) can win
 SMALL_FIGURE_MIN_SIZE = 8  # logos/icons drawn as vector curves may be this small (pt)...
 SMALL_FIGURE_CURVE_SHARE = 0.8  # ...if nearly all their shapes are curves, unlike table rules
@@ -358,9 +359,13 @@ def image_coverage(page, bbox: tuple) -> float:
     return covered_fraction(bbox, image_boxes(page))
 
 
-def visual_coverage(page, bbox: tuple) -> float:
+def visual_coverage(page, bbox: tuple, ignore_backgrounds: bool = False) -> float:
     """Fraction of the selection covered by images and vector figures."""
-    return covered_fraction(bbox, image_boxes(page) + find_vector_figures(page))
+    figures = find_vector_figures(page)
+    if ignore_backgrounds:
+        page_area = page.width * page.height
+        figures = [f for f in figures if (f[2] - f[0]) * (f[3] - f[1]) < BACKGROUND_FRACTION * page_area]
+    return covered_fraction(bbox, image_boxes(page) + figures)
 
 
 def extract_images(page, bbox: tuple[float, float, float, float]) -> list[str]:
@@ -555,8 +560,11 @@ def extract_single_page(page, request, bbox: tuple) -> dict:
         # Text sitting next to a picture stays text unless the picture fills the selection
         # With plenty of real text, backgrounds/borders/logos drawn as vectors must not turn it into an image
         text = page_text(page, bbox)
-        has_real_text = len("".join(text.split())) >= SMART_MIN_TEXT_CHARS
-        coverage = image_coverage(page, bbox) if has_real_text else visual_coverage(page, bbox)
+        has_real_text = len("".join(text.split())) >= SMART_MIN_TEXT_CHARS or (bool(text) and looks_like_prose(text))
+        coverage = (
+            image_coverage(page, bbox) if has_real_text
+            else visual_coverage(page, bbox, ignore_backgrounds=bool(text))
+        )
         if not text or coverage >= IMAGE_DOMINANCE:
             image_data = extract_images(page, bbox)
             if image_data:
