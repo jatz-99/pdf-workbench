@@ -46,8 +46,15 @@ async def lifespan(_app):
 
 app = FastAPI(title="PDF Workbench API", lifespan=lifespan)
 
+ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
@@ -97,6 +104,7 @@ FRAME_FRACTION = 0.75  # vector shapes covering this much of the page are page f
 IMAGE_DOMINANCE = 0.5  # images must fill this much of a selection to win over its text
 SMART_OCR_MIN_CONFIDENCE = 60  # smart mode only trusts OCR text this reliable...
 SMART_OCR_MIN_WORDS = 3  # ...and this long, so photos are not turned into gibberish
+SMART_OCR_MIN_ALPHA = 0.6  # ...and mostly letters, so chart axis numbers are not read as text
 
 
 def bbox_overlap(a: tuple, b: tuple) -> bool:
@@ -114,8 +122,8 @@ def render_region_data_url(page, bbox: tuple) -> str | None:
     """Render part of the page to a PNG; works for any image or vector drawing."""
     try:
         x0, top, x1, bottom = bbox
-        x0, top = max(x0, 0), max(top, 0)
-        x1, bottom = min(x1, page.width), min(bottom, page.height)
+        x0, top = max(x0, page.bbox[0]), max(top, page.bbox[1])
+        x1, bottom = min(x1, page.bbox[2]), min(bottom, page.bbox[3])
         if x1 - x0 < 1 or bottom - top < 1:
             return None
         rendered = page.crop((x0, top, x1, bottom)).to_image(resolution=IMAGE_RENDER_DPI)
@@ -291,8 +299,8 @@ def find_vector_figures(page) -> list:
             continue
         # Include nearby axis labels and legends in the picture
         pad = 30
-        figure = (max(x0 - pad, 0), max(top - pad, 0),
-                  min(x1 + pad, page.width), min(bottom + pad, page.height))
+        figure = (max(x0 - pad, page.bbox[0]), max(top - pad, page.bbox[1]),
+                  min(x1 + pad, page.bbox[2]), min(bottom + pad, page.bbox[3]))
         if any(bbox_overlap(figure, t) for t in table_boxes):
             continue
         figures.append(figure)
@@ -416,8 +424,10 @@ def resolve_pages(request, total: int) -> list[int]:
 
 
 def resolve_bbox(page, request) -> tuple:
+    # Pages can have a MediaBox that does not start at (0, 0), so work from page.bbox
+    px0, ptop, px1, pbottom = page.bbox
     if request.extraction_scope != "region":
-        return (0, 0, page.width, page.height)
+        return (px0, ptop, px1, pbottom)
     fractions = (request.x_percent, request.y_percent, request.width_percent, request.height_percent)
     if any(value is None for value in fractions):
         raise HTTPException(
@@ -427,10 +437,10 @@ def resolve_bbox(page, request) -> tuple:
     x, y, width, height = fractions
     # Clamp to the page so selections dragged past the edge don't fail
     return (
-        x * page.width,
-        y * page.height,
-        min(x + width, 1) * page.width,
-        min(y + height, 1) * page.height,
+        px0 + x * page.width,
+        ptop + y * page.height,
+        px0 + min(x + width, 1) * page.width,
+        ptop + min(y + height, 1) * page.height,
     )
 
 
@@ -469,9 +479,16 @@ def is_scanned(page, bbox: tuple) -> bool:
     return covered / area >= IMAGE_DOMINANCE
 
 
+def looks_like_prose(text: str) -> bool:
+    """True when most non-space characters are letters (not chart axes or digits)."""
+    chars = [c for c in text if not c.isspace()]
+    return bool(chars) and sum(c.isalpha() for c in chars) / len(chars) >= SMART_OCR_MIN_ALPHA
+
+
 def ocr_page_text(page, bbox: tuple) -> tuple[str, float, int]:
     """OCR the selection as rendered on the page. Returns (text, confidence, words)."""
-    x0, top, x1, bottom = max(bbox[0], 0), max(bbox[1], 0), min(bbox[2], page.width), min(bbox[3], page.height)
+    px0, ptop, px1, pbottom = page.bbox
+    x0, top, x1, bottom = max(bbox[0], px0), max(bbox[1], ptop), min(bbox[2], px1), min(bbox[3], pbottom)
     if x1 - x0 < 1 or bottom - top < 1:
         return "", 0.0, 0
     rendered = page.crop((x0, top, x1, bottom)).to_image(resolution=ocr.OCR_DPI)
@@ -492,7 +509,8 @@ def extract_single_page(page, request, bbox: tuple) -> dict:
             return {"detected_type": "table", "data": table_data}
         if ocr_ready:
             text, confidence, words = ocr_page_text(page, bbox)
-            if confidence >= SMART_OCR_MIN_CONFIDENCE and words >= SMART_OCR_MIN_WORDS:
+            if (confidence >= SMART_OCR_MIN_CONFIDENCE and words >= SMART_OCR_MIN_WORDS
+                    and looks_like_prose(text)):
                 return {"detected_type": "text", "data": text, "ocr": True}
         # Text sitting next to a picture stays text unless the picture fills the selection
         if not page_text(page, bbox) or visual_coverage(page, bbox) >= IMAGE_DOMINANCE:

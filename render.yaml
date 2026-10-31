@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: pdf-workbench-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    domains:
+      - api.pdfworkbench.me
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://pdfworkbench.me,https://www.pdfworkbench.me
+      - key: MAX_UPLOAD_MB
+        value: "50"
+      - key: DOCUMENT_TTL_MINUTES
+        value: "120"
+
+  - type: web
+    name: pdf-workbench-web
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    domains:
+      - pdfworkbench.me
+      - www.pdfworkbench.me
+    envVars:
+      - key: VITE_API_URL
+        value: https://api.pdfworkbench.me
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
