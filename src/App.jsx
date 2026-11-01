@@ -5,10 +5,13 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { deleteDocument, editDocument, extract, fetchDocumentFile, uploadPdf } from "./api";
+import { checkHealth, deleteDocument, editDocument, extract, fetchDocumentFile, uploadPdf } from "./api";
+import { HeroIllustration, LogoMark, Upload } from "./components/Icons";
+import { primaryButton } from "./components/ui";
 import PasswordDialog from "./components/PasswordDialog";
 import DocumentInfo from "./components/DocumentInfo";
 import ExtractionPanel from "./components/ExtractionPanel";
+import ThemeToggle from "./components/ThemeToggle";
 import ResultPanel, { HistoryPanel } from "./components/ResultPanel";
 import ToolsPanel from "./components/ToolsPanel";
 import Viewer, { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from "./components/Viewer";
@@ -57,6 +60,19 @@ function App() {
 
   const extractionController = useRef(null);
   const uploadToken = useRef(0);
+  const uploadInput = useRef(null);
+  const [backendUp, setBackendUp] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => checkHealth().then((up) => !cancelled && setBackendUp(up));
+    poll();
+    const timer = setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const pdfFile = doc?.file ?? null;
   const documentId = doc?.id ?? null;
@@ -334,10 +350,11 @@ function App() {
 
   // Keep user edits in the history entry so they survive switching between results
   function updateResultData(data) {
-    setResult((previous) => (previous ? { ...previous, data } : previous));
+    const withEdit = (value) => ({ ...value, data, originalData: value.originalData ?? value.data });
+    setResult((previous) => (previous ? withEdit(previous) : previous));
     setHistory((previous) =>
       previous.map((entry) =>
-        entry.id === activeHistoryId ? { ...entry, result: { ...entry.result, data } } : entry
+        entry.id === activeHistoryId ? { ...entry, result: withEdit(entry.result) } : entry
       )
     );
   }
@@ -418,7 +435,7 @@ function App() {
 
   return (
     <div
-      className="min-h-screen bg-slate-900 text-slate-100"
+      className="min-h-screen bg-bg text-fg"
       onDragOver={onDragOver}
       onDragLeave={(event) => {
         if (event.currentTarget === event.target) setIsDragging(false);
@@ -426,7 +443,7 @@ function App() {
       onDrop={onDrop}
     >
       {isDragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-4 border-dashed border-blue-400 bg-slate-900/80 text-xl font-semibold text-blue-300">
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-4 border-dashed border-accent bg-bg/80 text-xl font-semibold text-accent">
           Drop a PDF to open it
         </div>
       )}
@@ -445,26 +462,34 @@ function App() {
       )}
 
       {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-slate-700 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">PDF Workbench</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Extract useful information from your documents.
-          </p>
+      <header className="flex flex-col gap-4 border-b border-line px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <LogoMark />
+          <div>
+            <h1 className="text-3xl leading-none">PDF Workbench</h1>
+            <p className="mt-1 text-sm text-muted">
+              Extract text, tables and images from your documents.
+            </p>
+          </div>
         </div>
 
-        <label className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-700">
-          Upload PDF
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={(event) => {
-              handleFile(event.target.files?.[0]);
-              event.target.value = "";
-            }}
-            className="hidden"
-          />
-        </label>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 font-medium text-on-primary transition hover:bg-primary-hover">
+            <Upload className="h-4 w-4" />
+            Upload PDF
+            <input
+              ref={uploadInput}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(event) => {
+                handleFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+              className="hidden"
+            />
+          </label>
+        </div>
       </header>
 
       {/* Main workspace */}
@@ -484,21 +509,36 @@ function App() {
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
           placeholder={
-            <div className="max-w-md text-center">
-              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800 text-2xl">
-                PDF
+            <div className="mx-auto grid max-w-3xl items-center gap-8 rounded-3xl border-2 border-dashed border-line-strong bg-surface p-8 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+                  Extract anything
+                </p>
+                <h2 className="mt-3 text-4xl leading-tight sm:text-5xl">
+                  Every page holds something useful.
+                </h2>
+                <p className="mt-4 text-sm leading-6 text-muted">
+                  Drop a PDF anywhere on this page, preview it, select a region and pull out
+                  the text, tables or images you need.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => uploadInput.current?.click()}
+                  className={`${primaryButton} mt-6 inline-flex items-center gap-2`}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload a PDF
+                </button>
               </div>
-              <h2 className="text-xl font-semibold">Your document workspace</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                Upload or drop a PDF to preview its pages, select a region, and choose
-                what you want to extract.
-              </p>
+              <div className="hidden md:block">
+                <HeroIllustration />
+              </div>
             </div>
           }
         />
 
         {/* Right: Controls */}
-        <aside className="space-y-6 bg-slate-900 p-6">
+        <aside className="space-y-6 bg-bg p-6">
           <DocumentInfo file={pdfFile} numPages={numPages} />
 
           <ExtractionPanel
@@ -535,6 +575,35 @@ function App() {
           />
         </aside>
       </main>
+
+      {/* Feature highlights (empty state only) */}
+      {!pdfFile && (
+        <section className="grid gap-4 border-t border-line px-6 py-8 sm:grid-cols-3">
+          {[
+            ["01", "Select what matters", "Draw a box around a table, paragraph or figure, or process whole pages and ranges."],
+            ["02", "Edit before you export", "Fix text and table cells in place, then copy or download TXT, CSV, XLSX or JSON."],
+            ["03", "Handle scans too", "Scanned pages are read with OCR, and password-protected PDFs open with your password."],
+          ].map(([number, title, body]) => (
+            <div key={number} className="rounded-3xl border border-line bg-surface p-6">
+              <p className="text-sm font-semibold text-accent">{number}</p>
+              <h3 className="mt-2 font-display text-xl">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted">{body}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-6 py-4 text-xs text-subtle">
+        <span>PDF Workbench · Your files stay on your own server and are deleted automatically.</span>
+        <span className="inline-flex items-center gap-2" role="status">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              backendUp === null ? "bg-subtle" : backendUp ? "bg-emerald-500" : "bg-danger"
+            }`}
+          />
+          {backendUp === null ? "Checking backend…" : backendUp ? "Backend connected" : "Backend offline"}
+        </span>
+      </footer>
     </div>
   );
 }

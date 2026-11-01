@@ -1,13 +1,25 @@
 export const primaryButton =
-  "rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500";
+  "rounded-full bg-primary px-4 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-subtle";
 
 export const secondaryButton =
-  "rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-full border border-line-strong px-4 py-2 text-sm font-medium transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40";
 
 export const smallButton =
-  "rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-full border border-line-strong px-3 py-1.5 text-xs font-medium transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40";
 
-export const card = "rounded-xl border border-slate-700 bg-slate-800 p-5 shadow-sm";
+export const card = "rounded-3xl border border-line bg-surface p-6 shadow-sm";
 
 export const inputClass =
-  "rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm outline-none focus:border-blue-500";
+  "rounded-lg border border-line bg-sunken px-2 py-2 text-sm outline-none focus:border-accent";
+
+export const eyebrow = "text-[11px] font-semibold uppercase tracking-[0.14em] text-muted";
+
+export const chip = (active) =>
+  `rounded-full px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+    active
+      ? "bg-primary text-on-primary"
+      : "bg-surface-2 text-fg-soft hover:bg-surface-3"
+  }`;
+
+export const iconButton =
+  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-line-strong text-fg transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40";

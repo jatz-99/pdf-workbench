@@ -2,7 +2,11 @@ import { useRef, useState } from "react";
 import { editDocument, mergeDocument } from "../api";
 import { movePage } from "../utils/pages";
 import { downloadBlob } from "../utils/exporters";
-import { card, inputClass, secondaryButton } from "./ui";
+import { card, eyebrow, inputClass, secondaryButton } from "./ui";
+import { ArrowDown, ArrowUp, Download, Merge, RotateLeft, RotateRight, Trash, Undo } from "./Icons";
+
+const toolButton = `${secondaryButton} inline-flex items-center justify-center gap-2`;
+const iconClass = "h-4 w-4";
 
 export default function ToolsPanel({
   file,
@@ -64,8 +68,9 @@ export default function ToolsPanel({
 
   return (
     <section className={card}>
-      <h2 className="text-lg font-semibold">PDF Tools</h2>
-      <p className="mt-1 text-sm text-slate-400">
+      <p className={eyebrow}>Tools</p>
+      <h2 className="mt-1 text-2xl">Edit this PDF</h2>
+      <p className="mt-1 text-sm text-muted">
         Edits create a new version of the document. Download it when you are done.
       </p>
 
@@ -74,43 +79,43 @@ export default function ToolsPanel({
           type="button"
           disabled={disabled}
           onClick={() => edit({ op: "rotate", pages: [pageNumber], angle: -90 })}
-          className={secondaryButton}
+          className={toolButton}
         >
-          Rotate ⟲
+          <RotateLeft className={iconClass} /> Rotate left
         </button>
         <button
           type="button"
           disabled={disabled}
           onClick={() => edit({ op: "rotate", pages: [pageNumber], angle: 90 })}
-          className={secondaryButton}
+          className={toolButton}
         >
-          Rotate ⟳
+          <RotateRight className={iconClass} /> Rotate right
         </button>
         <button
           type="button"
           disabled={disabled || numPages < 2}
           onClick={() => edit({ op: "delete", pages: [pageNumber] })}
-          className={secondaryButton}
+          className={toolButton}
         >
-          Delete page
+          <Trash className={iconClass} /> Delete page
         </button>
         <button
           type="button"
           disabled={disabled || pageNumber <= 1}
           onClick={() => movePageBy(-1)}
-          className={secondaryButton}
+          className={toolButton}
           title="Move this page up (or drag thumbnails)"
         >
-          Move up ↑
+          <ArrowUp className={iconClass} /> Move up
         </button>
         <button
           type="button"
           disabled={disabled || pageNumber >= numPages}
           onClick={() => movePageBy(1)}
-          className={secondaryButton}
+          className={toolButton}
           title="Move this page down (or drag thumbnails)"
         >
-          Move down ↓
+          <ArrowDown className={iconClass} /> Move down
         </button>
         <button
           type="button"
@@ -119,14 +124,14 @@ export default function ToolsPanel({
             setError("");
             await onUndo();
           }}
-          className={secondaryButton}
+          className={toolButton}
           title="Undo last edit (Ctrl+Z)"
         >
-          Undo{undoCount > 0 ? ` (${undoCount})` : ""}
+          <Undo className={iconClass} /> Undo{undoCount > 0 ? ` (${undoCount})` : ""}
         </button>
       </div>
 
-      <form onSubmit={keepPages} className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+      <form onSubmit={keepPages} className="mt-3 flex items-center gap-2 text-sm text-muted">
         <span>Keep pages</span>
         <input
           type="number"
@@ -147,7 +152,7 @@ export default function ToolsPanel({
           aria-label="Last page to keep"
           className={`${inputClass} w-16 text-center`}
         />
-        <button type="submit" disabled={disabled || !keepFrom} className={secondaryButton}>
+        <button type="submit" disabled={disabled || !keepFrom} className={toolButton}>
           Split
         </button>
       </form>
@@ -157,9 +162,9 @@ export default function ToolsPanel({
           type="button"
           disabled={disabled}
           onClick={() => mergeInput.current.click()}
-          className={secondaryButton}
+          className={toolButton}
         >
-          Merge another PDF…
+          <Merge className={iconClass} /> Merge PDF…
         </button>
         <input
           ref={mergeInput}
@@ -173,15 +178,15 @@ export default function ToolsPanel({
           type="button"
           disabled={!file}
           onClick={() => downloadBlob(file, file.name)}
-          className={secondaryButton}
+          className={toolButton}
         >
-          Download PDF
+          <Download className={iconClass} /> Download PDF
         </button>
       </div>
 
-      {busy && <p className="mt-3 text-xs text-slate-400">Working...</p>}
+      {busy && <p className="mt-3 text-xs text-muted">Working...</p>}
       {error && (
-        <p role="alert" className="mt-3 text-sm text-red-400">
+        <p role="alert" className="mt-3 text-sm text-danger">
           {error}
         </p>
       )}

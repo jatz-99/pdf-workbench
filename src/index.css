@@ -1,12 +1,85 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource/dm-serif-display";
 @import "tailwindcss";
 
-.pdf-page canvas {
-  display: block;
+/* Light theme (default tokens); the dark set below applies when <html data-theme="dark"> */
+:root {
+  color-scheme: light;
+  --bg: #f5f2eb;
+  --surface: #fbf9f4;
+  --surface-2: #eae5da;
+  --surface-3: #ded8ca;
+  --sunken: #efebe2;
+  --line: #e0dacb;
+  --line-strong: #c9c2b0;
+  --fg: #14120e;
+  --fg-soft: #3a362f;
+  --muted: #6b655a;
+  --subtle: #7d7769;
+  --primary: #14120e;
+  --primary-hover: #2c2924;
+  --on-primary: #fbf9f4;
+  --accent: #b94a24;
+  --warn: #8f5400;
+  --danger: #b42318;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f0e0b;
+  --surface: #18181b;
+  --surface-2: #2a2a2e;
+  --surface-3: #38383d;
+  --sunken: #0b0a08;
+  --line: #2e2d2a;
+  --line-strong: #46443f;
+  --fg: #f5f2eb;
+  --fg-soft: #d6d2c8;
+  --muted: #a19b8e;
+  --subtle: #8c8678;
+  --primary: #f5f2eb;
+  --primary-hover: #ffffff;
+  --on-primary: #14120e;
+  --accent: #e0663b;
+  --warn: #e5a53a;
+  --danger: #f2766b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "DM Serif Display", ui-serif, Georgia, serif;
 }
 
 html,
 body {
-  background-color: #0f172a; /* slate-900, matches the app background */
-  color-scheme: dark;
+  background-color: var(--bg);
+  color: var(--fg);
+}
 
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.pdf-page canvas {
+  display: block;
 }

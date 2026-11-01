@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, Thumbnail } from "react-pdf";
+import { ChevronLeft, ChevronRight, Thumbnails, ZoomIn, ZoomOut } from "./Icons";
+import { eyebrow, iconButton } from "./ui";
 import { clamp, selectionRect } from "../utils/selection";
 
 export const MIN_ZOOM = 0.5;
@@ -7,9 +9,6 @@ export const MAX_ZOOM = 1.5;
 export const ZOOM_STEP = 0.25;
 
 const PAGE_DRAG_TYPE = "application/x-pdf-page";
-
-const buttonClass =
-  "rounded-lg border border-slate-600 px-3 py-2 text-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
 
 function LazyThumbnail({ pageNumber, active, onSelect, onReorder }) {
   const ref = useRef(null);
@@ -52,18 +51,18 @@ function LazyThumbnail({ pageNumber, active, onSelect, onReorder }) {
       aria-label={`Go to page ${pageNumber}`}
       aria-current={active ? "page" : undefined}
       className={`block w-full rounded-md border-2 p-1 text-center transition ${
-        active ? "border-blue-500" : "border-transparent hover:border-slate-600"
-      } ${isOver ? "bg-blue-500/20" : ""}`}
+        active ? "border-accent" : "border-transparent hover:border-line-strong"
+      } ${isOver ? "bg-accent/20" : ""}`}
     >
-      <div className="flex min-h-24 items-center justify-center bg-slate-900">
+      <div className="flex min-h-24 items-center justify-center bg-bg">
         {visible && <Thumbnail pageNumber={pageNumber} width={96} />}
       </div>
-      <span className="mt-1 block text-xs text-slate-400">{pageNumber}</span>
+      <span className="mt-1 block text-xs text-muted">{pageNumber}</span>
     </button>
   );
 }
 
-function PageForm({ pageNumber, numPages, onPageChange }) {
+function PageForm({ pageNumber, numPages, onPageChange, disabled }) {
   // Remounted (via key) whenever the page changes, so the input resets itself
   const [pageInput, setPageInput] = useState(String(pageNumber));
 
@@ -78,41 +77,37 @@ function PageForm({ pageNumber, numPages, onPageChange }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+    <form onSubmit={submit} className="flex items-center gap-2">
       <button
         type="button"
         onClick={() => onPageChange(pageNumber - 1)}
-        disabled={pageNumber <= 1}
-        className={buttonClass}
+        disabled={disabled || pageNumber <= 1}
+        className={iconButton}
+        aria-label="Previous page"
         title="Previous page (←)"
       >
-        Previous
+        <ChevronLeft />
       </button>
-      <span className="text-sm text-slate-400">Page</span>
       <input
         type="number"
         min="1"
-        max={numPages}
-        value={pageInput}
+        max={numPages || undefined}
+        value={disabled ? "" : pageInput}
+        disabled={disabled}
         onChange={(event) => setPageInput(event.target.value)}
-        aria-label="Page number"
-        className="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-center text-sm outline-none focus:border-blue-500"
+        aria-label="Page number (press Enter to go)"
+        className="h-10 w-14 rounded-full border border-line bg-sunken px-2 text-center text-sm outline-none focus:border-accent disabled:opacity-40"
       />
-      <span className="text-sm text-slate-400">of {numPages}</span>
-      <button
-        type="submit"
-        className="rounded-lg bg-slate-700 px-3 py-2 text-sm transition hover:bg-slate-600"
-      >
-        Go
-      </button>
+      <span className="text-sm text-muted">/ {numPages || "–"}</span>
       <button
         type="button"
         onClick={() => onPageChange(pageNumber + 1)}
-        disabled={pageNumber >= numPages}
-        className={buttonClass}
+        disabled={disabled || pageNumber >= numPages}
+        className={iconButton}
+        aria-label="Next page"
         title="Next page (→)"
       >
-        Next
+        <ChevronRight />
       </button>
     </form>
   );
@@ -217,73 +212,76 @@ export default function Viewer({
   const ready = file && numPages;
 
   return (
-    <section className="flex flex-col border-b border-slate-700 bg-slate-800 lg:col-span-2 lg:border-r lg:border-b-0">
-      {/* Viewer toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 px-6 py-4">
-        <div>
-          <h2 className="font-semibold">Document Preview</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {file ? file.name : "Upload a PDF to get started"}
-          </p>
+    <section className="flex flex-col border-b border-line bg-surface lg:col-span-2 lg:border-r lg:border-b-0">
+      {/* Viewer toolbar (always visible; disabled until a PDF has loaded) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
+        <div className="min-w-0">
+          <p className={eyebrow}>Preview</p>
+          <h2 className="truncate text-xl">{file ? file.name : "Document Preview"}</h2>
         </div>
 
-        {ready && (
-          <div className="flex flex-wrap items-center gap-3">
-            <PageForm
-              key={pageNumber}
-              pageNumber={pageNumber}
-              numPages={numPages}
-              onPageChange={onPageChange}
-            />
+        <div className="flex flex-wrap items-center gap-3">
+          <PageForm
+            key={pageNumber}
+            pageNumber={pageNumber}
+            numPages={numPages}
+            onPageChange={onPageChange}
+            disabled={!ready}
+          />
 
-            <div className="flex items-center gap-1" role="group" aria-label="Zoom">
-              <button
-                type="button"
-                onClick={() => onZoomChange((z) => clamp(z - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
-                disabled={zoom <= MIN_ZOOM}
-                aria-label="Zoom out"
-                title="Zoom out (-)"
-                className={buttonClass}
-              >
-                −
-              </button>
-              <button
-                type="button"
-                onClick={() => onZoomChange(1)}
-                title="Fit to width (0)"
-                className="w-16 rounded-lg border border-slate-600 px-2 py-2 text-sm transition hover:bg-slate-700"
-              >
-                {Math.round(zoom * 100)}%
-              </button>
-              <button
-                type="button"
-                onClick={() => onZoomChange((z) => clamp(z + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
-                disabled={zoom >= MAX_ZOOM}
-                aria-label="Zoom in"
-                title="Zoom in (+)"
-                className={buttonClass}
-              >
-                +
-              </button>
-            </div>
-
+          <div className="flex items-center gap-1" role="group" aria-label="Zoom">
             <button
               type="button"
-              onClick={() => setShowThumbnails((value) => !value)}
-              aria-pressed={showThumbnails}
-              className={buttonClass}
+              onClick={() => onZoomChange((z) => clamp(z - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
+              disabled={!ready || zoom <= MIN_ZOOM}
+              aria-label="Zoom out"
+              title="Zoom out (-)"
+              className={iconButton}
             >
-              Thumbnails
+              <ZoomOut />
+            </button>
+            <button
+              type="button"
+              onClick={() => onZoomChange(1)}
+              disabled={!ready}
+              title="Fit to width (0)"
+              className="h-10 w-16 rounded-full border border-line-strong px-2 text-sm transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => onZoomChange((z) => clamp(z + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
+              disabled={!ready || zoom >= MAX_ZOOM}
+              aria-label="Zoom in"
+              title="Zoom in (+)"
+              className={iconButton}
+            >
+              <ZoomIn />
             </button>
           </div>
-        )}
+
+          <button
+            type="button"
+            onClick={() => setShowThumbnails((value) => !value)}
+            disabled={!ready}
+            aria-pressed={showThumbnails}
+            aria-label="Toggle page thumbnails"
+            title={showThumbnails ? "Hide thumbnails" : "Show thumbnails"}
+            className={`${iconButton} ${
+              showThumbnails && ready ? "border-accent! bg-accent/10 text-accent" : ""
+            }`}
+          >
+            <Thumbnails />
+          </button>
+        </div>
       </div>
 
-      <div className="flex min-h-[650px] flex-1 bg-slate-950">
+      <div className="flex min-h-[650px] flex-1 bg-sunken">
         {loadError ? (
           <div className="m-auto max-w-md p-6 text-center">
-            <p className="text-lg font-semibold text-red-400">Unable to display PDF</p>
-            <p className="mt-2 text-sm text-slate-400">{loadError}</p>
+            <p className="text-lg font-semibold text-danger">Unable to display PDF</p>
+            <p className="mt-2 text-sm text-muted">{loadError}</p>
           </div>
         ) : !file ? (
           <div className="m-auto p-6">{placeholder}</div>
@@ -293,13 +291,13 @@ export default function Viewer({
             onLoadSuccess={onLoadSuccess}
             onLoadError={onLoadError}
             className="flex min-w-0 flex-1"
-            loading={<p className="m-auto py-10 text-sm text-slate-400">Loading PDF...</p>}
-            error={<p className="m-auto py-10 text-sm text-red-400">Failed to render this PDF.</p>}
+            loading={<p className="m-auto py-10 text-sm text-muted">Loading PDF...</p>}
+            error={<p className="m-auto py-10 text-sm text-danger">Failed to render this PDF.</p>}
           >
             {ready && showThumbnails && (
               <nav
                 aria-label="Page thumbnails"
-                className="relative hidden w-32 shrink-0 border-r border-slate-800 sm:block"
+                className="relative hidden w-32 shrink-0 border-r border-line sm:block"
               >
                 {/* Absolutely positioned so the strip matches the page area's height and scrolls inside it */}
                 <div className="absolute inset-0 space-y-2 overflow-y-auto p-2">
@@ -336,7 +334,7 @@ export default function Viewer({
                     >
                       {rect && selection.page === pageNumber && (
                         <div
-                          className="pointer-events-none absolute border-2 border-blue-400 bg-blue-400/10"
+                          className="pointer-events-none absolute border-2 border-accent bg-accent/10"
                           style={{
                             left: `${rect.x * 100}%`,
                             top: `${rect.y * 100}%`,
@@ -355,7 +353,7 @@ export default function Viewer({
       </div>
 
       {file && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-700 px-6 py-3 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-6 py-3 text-xs text-subtle">
           <span>
             {numPages ? `${numPages} page${numPages === 1 ? "" : "s"}` : "Reading document..."}
           </span>

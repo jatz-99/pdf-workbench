@@ -8,13 +8,20 @@ import {
   tablesToTsv,
 } from "../utils/exporters";
 import { exportXlsx } from "../api";
-import { card, secondaryButton, smallButton } from "./ui";
+import { card, eyebrow, secondaryButton, smallButton } from "./ui";
 
 const cellInput =
-  "w-full min-w-16 bg-transparent px-3 py-2 text-sm text-slate-200 outline-none focus:bg-slate-900 focus:ring-1 focus:ring-blue-500";
+  "w-full min-w-16 bg-transparent px-3 py-2 text-sm text-fg outline-none focus:bg-bg focus:ring-1 focus:ring-accent";
 
 export default function ResultPanel({ result, onChange, onClear }) {
   const [status, setStatus] = useState("");
+
+  // Edits keep the first extracted value so they can be reverted
+  const editable = result.detected_type === "text" || result.detected_type === "table";
+  const edited =
+    editable &&
+    result.originalData !== undefined &&
+    JSON.stringify(result.originalData) !== JSON.stringify(result.data);
 
   const editTable = (tableIndex, update) =>
     onChange(result.data.map((table, index) => (index === tableIndex ? update(table) : table)));
@@ -67,17 +74,32 @@ export default function ResultPanel({ result, onChange, onClear }) {
 
   return (
     <section className={card}>
-      <h2 className="text-lg font-semibold">Extraction Result</h2>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className={eyebrow}>Result</p>
+          <h2 className="mt-1 text-2xl">Extraction result</h2>
+        </div>
+        {edited && (
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
+              Edited
+            </span>
+            <button type="button" onClick={() => onChange(result.originalData)} className={smallButton}>
+              Reset
+            </button>
+          </div>
+        )}
+      </div>
 
       {result.detected_type === "text" && (
         <>
           {result.ocr && (
-            <p className="mt-3 text-xs text-amber-300">
+            <p className="mt-3 text-xs text-warn">
               This page is a scan, so the text was recognised with OCR and may contain mistakes.
             </p>
           )}
           {result.scanned && (
-            <p className="mt-3 text-xs text-amber-300">
+            <p className="mt-3 text-xs text-warn">
               {result.ocr_available
                 ? "This area looks like a scanned image and OCR was skipped."
                 : "This area looks like a scanned image, but OCR is not installed on the server (Tesseract is required)."}
@@ -87,9 +109,9 @@ export default function ResultPanel({ result, onChange, onClear }) {
             value={result.data}
             onChange={(event) => onChange(event.target.value)}
             aria-label="Extracted text"
-            className="mt-4 min-h-48 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm leading-6 text-slate-200 outline-none focus:border-blue-500"
+            className="mt-4 min-h-48 w-full resize-y rounded-lg border border-line bg-bg p-3 text-sm leading-6 text-fg outline-none focus:border-accent"
           />
-          <p className="mt-1 text-xs text-slate-500">You can edit this text before copying or downloading.</p>
+          <p className="mt-1 text-xs text-subtle">You can edit this text before copying or downloading.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
@@ -114,7 +136,7 @@ export default function ResultPanel({ result, onChange, onClear }) {
       {result.detected_type === "table" && (
         <>
           {result.ocr && (
-            <p className="mt-3 text-xs text-amber-300">
+            <p className="mt-3 text-xs text-warn">
               This page is a scan, so the table was rebuilt from its ruled grid and read with OCR. Check the cells for mistakes.
             </p>
           )}
@@ -122,14 +144,14 @@ export default function ResultPanel({ result, onChange, onClear }) {
             {result.data.map((table, tableIndex) => (
               <div key={tableIndex}>
                 {result.pages?.[tableIndex] && result.pages.length > 1 && (
-                  <p className="mb-1 text-xs text-slate-500">Page {result.pages[tableIndex]}</p>
+                  <p className="mb-1 text-xs text-subtle">Page {result.pages[tableIndex]}</p>
                 )}
                 <table className="w-full border-collapse text-left text-sm">
                   <tbody>
                     {table.map((row, rowIndex) => (
                       <tr key={rowIndex}>
                         {row.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="border border-slate-700 p-0">
+                          <td key={cellIndex} className="border border-line p-0">
                             <input
                               value={cell ?? ""}
                               onChange={(event) =>
@@ -145,7 +167,7 @@ export default function ResultPanel({ result, onChange, onClear }) {
                             type="button"
                             onClick={() => removeRow(tableIndex, rowIndex)}
                             aria-label={`Delete row ${rowIndex + 1}`}
-                            className="text-slate-500 hover:text-red-400"
+                            className="text-subtle hover:text-danger"
                           >
                             ×
                           </button>
@@ -207,7 +229,7 @@ export default function ResultPanel({ result, onChange, onClear }) {
             {result.data.map((image, index) => (
               <div key={index}>
                 {result.pages?.length > 1 && (
-                  <p className="mb-1 text-xs text-slate-500">Page {result.pages[index]}</p>
+                  <p className="mb-1 text-xs text-subtle">Page {result.pages[index]}</p>
                 )}
                 <img
                   src={image}
@@ -233,7 +255,7 @@ export default function ResultPanel({ result, onChange, onClear }) {
       )}
 
       {status && (
-        <p role="status" className="mt-3 text-xs text-slate-400">
+        <p role="status" className="mt-3 text-xs text-muted">
           {status}
         </p>
       )}
@@ -257,8 +279,8 @@ export function HistoryPanel({ history, activeId, onSelect }) {
               type="button"
               onClick={() => onSelect(entry)}
               aria-current={entry.id === activeId ? "true" : undefined}
-              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-700 ${
-                entry.id === activeId ? "bg-slate-700 text-blue-300" : "text-slate-300"
+              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-surface-2 ${
+                entry.id === activeId ? "bg-surface-2 text-accent" : "text-fg-soft"
               }`}
             >
               {entry.label}

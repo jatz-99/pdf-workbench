@@ -1,11 +1,17 @@
-import { card, inputClass, primaryButton } from "./ui";
+import { useState } from "react";
+import { card, chip, eyebrow, inputClass, primaryButton } from "./ui";
 
-const scopeButton = (active) =>
-  `rounded-lg border px-3 py-3 text-sm font-medium transition ${
-    active
-      ? "border-blue-500 bg-blue-600/10 text-blue-300"
-      : "border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500"
-  }`;
+const CONTENT_TYPES = [
+  ["text", "Text"],
+  ["tables", "Tables"],
+  ["images", "Images"],
+];
+
+const PAGE_MODES = [
+  ["page", "Current page"],
+  ["all", "All pages"],
+  ["range", "Page range"],
+];
 
 export default function ExtractionPanel({
   showForm,
@@ -21,62 +27,65 @@ export default function ExtractionPanel({
   onExtract,
   message,
 }) {
+  const [contentType, setContentType] = useState("text");
+
   return (
     <section className={card}>
-      <h2 className="text-lg font-semibold">Extraction Actions</h2>
+      <p className={eyebrow}>Extract</p>
+      <h2 className="mt-1 text-2xl">What do you need?</h2>
 
       {showForm && (
         <>
-          <p className="mt-1 text-sm text-slate-400">
-            Choose a content type and where to extract it from.
+          <p className="mt-1 text-sm text-muted">
+            Pick where to extract from and what to pull out.
           </p>
 
           <div className="mt-5">
-            <p className="mb-3 text-sm font-medium text-slate-300">Extraction Scope</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className={`${eyebrow} mb-2`}>Area</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Extraction area">
               <button
                 type="button"
                 onClick={() => onScopeChange("document")}
                 aria-pressed={scope === "document"}
-                className={scopeButton(scope === "document")}
+                className={chip(scope === "document")}
               >
-                Entire Page
+                Entire pages
               </button>
               <button
                 type="button"
                 onClick={() => onScopeChange("region")}
                 aria-pressed={scope === "region"}
-                className={scopeButton(scope === "region")}
+                className={chip(scope === "region")}
               >
-                Selected Region
+                Selected region
               </button>
             </div>
-
-            <p className="mt-3 text-xs leading-5 text-slate-500">
+            <p className="mt-2 text-xs leading-5 text-subtle">
               {scope === "document"
                 ? "Process all matching content on the chosen pages."
-                : "Draw a rectangle on the current PDF page to choose the area to process."}
+                : "Draw a rectangle on the current PDF page. The type is detected for you."}
             </p>
           </div>
 
           {scope === "document" && (
-            <div className="mt-4">
-              <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="range-mode">
-                Pages
-              </label>
-              <select
-                id="range-mode"
-                value={range.mode}
-                onChange={(event) => onRangeChange({ ...range, mode: event.target.value })}
-                className={`${inputClass} w-full`}
-              >
-                <option value="page">Current page</option>
-                <option value="all">All pages</option>
-                <option value="range">Page range…</option>
-              </select>
+            <div className="mt-5">
+              <p className={`${eyebrow} mb-2`}>Pages</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Pages to extract from">
+                {PAGE_MODES.map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => onRangeChange({ ...range, mode })}
+                    aria-pressed={range.mode === mode}
+                    className={chip(range.mode === mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
               {range.mode === "range" && (
-                <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+                <div className="mt-3 flex items-center gap-2 text-sm text-muted">
                   <input
                     type="number"
                     min="1"
@@ -101,44 +110,44 @@ export default function ExtractionPanel({
             </div>
           )}
 
+          {scope === "document" && (
+            <div className="mt-5">
+              <p className={`${eyebrow} mb-2`}>Content</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Content type">
+                {CONTENT_TYPES.map(([type, label]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setContentType(type)}
+                    aria-pressed={contentType === type}
+                    className={chip(contentType === type)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-6">
-            {scope === "document" ? (
-              <>
-                <p className="mb-3 text-sm font-medium text-slate-300">Select content type</p>
-                <div className="flex flex-col gap-3">
-                  {[
-                    ["text", "Extract Text"],
-                    ["tables", "Extract Tables"],
-                    ["images", "Extract Images"],
-                  ].map(([type, label]) => (
-                    <button
-                      key={type}
-                      type="button"
-                      disabled={disabled || isExtracting}
-                      onClick={() => onExtract(type)}
-                      className={primaryButton}
-                    >
-                      {isExtracting ? "Extracting..." : label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <button
-                type="button"
-                disabled={disabled || isExtracting}
-                onClick={() => onExtract("smart")}
-                className={primaryButton}
-              >
-                {isExtracting ? "Detecting..." : "Smart Extract Selection"}
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={disabled || isExtracting}
+              onClick={() => onExtract(scope === "document" ? contentType : "smart")}
+              className={`${primaryButton} w-full`}
+            >
+              {isExtracting
+                ? "Extracting..."
+                : scope === "document"
+                  ? `Extract ${CONTENT_TYPES.find(([type]) => type === contentType)[1].toLowerCase()}`
+                  : "Smart extract selection"}
+            </button>
 
             {!hasDocument && (
-              <p className="mt-3 text-xs text-amber-400">Upload a PDF to enable extraction.</p>
+              <p className="mt-3 text-xs text-warn">Upload a PDF to enable extraction.</p>
             )}
             {hasDocument && scope === "region" && !hasSelection && (
-              <p className="mt-3 text-xs text-amber-400">
+              <p className="mt-3 text-xs text-warn">
                 Select a rectangular region on the PDF first.
               </p>
             )}
@@ -149,7 +158,7 @@ export default function ExtractionPanel({
       {message && (
         <p
           role="status"
-          className="mt-4 rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm leading-5 text-slate-300"
+          className="mt-4 rounded-2xl border border-line bg-bg p-3 text-sm leading-5 text-fg-soft"
         >
           {message}
         </p>

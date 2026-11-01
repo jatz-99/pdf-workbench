@@ -7,6 +7,8 @@ Upload a PDF, preview it, and pull out text, tables and images: from a whole pag
 - **Viewer**: zoom (buttons, `+`/`-`/`0`, Ctrl+wheel), thumbnail sidebar, page navigation (`←`/`→`), drag-and-drop upload, restores the last document after a reload
 - **Extraction**: text, tables (ruled and borderless), images and vector figures, "smart" detection for a drawn region
 - **Scope**: current page, all pages, a page range, or a selected region (`Esc` clears it)
+- **Theme**: light/dark switch (follows your system by default, remembered per browser)
+- **Editing**: fix extracted text and table cells (add/remove rows and columns, reset to the original) before exporting
 - **Results**: copy to clipboard, download as TXT / CSV / XLSX / JSON / PNG, extraction history for the session
 - **PDF tools**: rotate, delete page, split (keep a range), merge, reorder pages by dragging thumbnails, undo
 - **Scanned pages**: optional OCR (Tesseract) for pages with no text layer
