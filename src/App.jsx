@@ -63,14 +63,23 @@ function App() {
   const uploadInput = useRef(null);
   const [backendUp, setBackendUp] = useState(null);
 
+  // Check the backend on load, when the tab regains focus, and again soon while it looks offline
   useEffect(() => {
     let cancelled = false;
-    const poll = () => checkHealth().then((up) => !cancelled && setBackendUp(up));
+    let timer;
+    const poll = async () => {
+      clearTimeout(timer);
+      const up = await checkHealth();
+      if (cancelled) return;
+      setBackendUp(up);
+      timer = setTimeout(poll, up ? 30000 : 5000);
+    };
     poll();
-    const timer = setInterval(poll, 30000);
+    window.addEventListener("focus", poll);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      clearTimeout(timer);
+      window.removeEventListener("focus", poll);
     };
   }, []);
 
