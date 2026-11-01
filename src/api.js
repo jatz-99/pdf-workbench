@@ -82,12 +82,3 @@ export async function mergeDocument(documentId, file) {
 export async function exportXlsx(tables) {
   return (await request("/export/xlsx", json({ tables }))).blob();
 }
-
-export async function checkHealth() {
-  try {
-    await request("/health");
-    return true;
-  } catch {
-    return false;
-  }
-}

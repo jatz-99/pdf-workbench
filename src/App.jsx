@@ -5,7 +5,7 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { checkHealth, deleteDocument, editDocument, extract, fetchDocumentFile, uploadPdf } from "./api";
+import { deleteDocument, editDocument, extract, fetchDocumentFile, uploadPdf } from "./api";
 import { HeroIllustration, LogoMark, Upload } from "./components/Icons";
 import { primaryButton } from "./components/ui";
 import PasswordDialog from "./components/PasswordDialog";
@@ -17,6 +17,7 @@ import ToolsPanel from "./components/ToolsPanel";
 import Viewer, { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from "./components/Viewer";
 import { movePage } from "./utils/pages";
 import { clamp, isUsableRect, selectionRect } from "./utils/selection";
+import { clearFile, loadFile, saveFile } from "./utils/savedFile";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -61,27 +62,6 @@ function App() {
   const extractionController = useRef(null);
   const uploadToken = useRef(0);
   const uploadInput = useRef(null);
-  const [backendUp, setBackendUp] = useState(null);
-
-  // Check the backend on load, when the tab regains focus, and again soon while it looks offline
-  useEffect(() => {
-    let cancelled = false;
-    let timer;
-    const poll = async () => {
-      clearTimeout(timer);
-      const up = await checkHealth();
-      if (cancelled) return;
-      setBackendUp(up);
-      timer = setTimeout(poll, up ? 30000 : 5000);
-    };
-    poll();
-    window.addEventListener("focus", poll);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      window.removeEventListener("focus", poll);
-    };
-  }, []);
 
   const pdfFile = doc?.file ?? null;
   const documentId = doc?.id ?? null;
@@ -106,8 +86,10 @@ function App() {
   }
 
   // Load a document into the viewer
-  function openDocument(next) {
+  function openDocument(next, persist = true) {
     cancelExtraction();
+    // Keep a local copy so a reload still works if the server has dropped its copy
+    if (persist && next?.file && next.id) saveFile(next.file);
     setDoc(next);
     setNumPages(next?.pages ?? null);
     setPageNumber(1);
@@ -232,11 +214,40 @@ function App() {
     const saved = readSavedDocument();
     if (!saved?.id) return;
     let cancelled = false;
-    fetchDocumentFile(saved.id, saved.name ?? "document.pdf")
+    const name = saved.name ?? "document.pdf";
+
+    // The server may have deleted or lost its copy (free hosting restarts often):
+    // re-upload the copy kept in this browser instead of dropping the user's document.
+    async function restoreFromBrowser() {
+      const blob = await loadFile();
+      if (!blob) return false;
+      if (cancelled) return true;
+      const file = new File([blob], name, { type: "application/pdf" });
+      openDocument({ file, id: null, pages: null }, false);
+      setExtractionMessage("Restoring your document...");
+      try {
+        const data = await uploadPdf(file);
+        if (cancelled) return true;
+        openDocument({ file, id: data.document_id, pages: data.pages }, false);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: data.document_id, name }));
+        setExtractionMessage("Your document was restored. Select an area or choose an extraction.");
+      } catch (error) {
+        // Keep the local copy: the server may just be starting up, so a reload can try again
+        if (!cancelled) setExtractionMessage(`${error.message} Reload the page to try again.`);
+      }
+      return true;
+    }
+
+    fetchDocumentFile(saved.id, name)
       .then((file) => {
-        if (!cancelled) openDocument({ file, id: saved.id, pages: null });
+        if (!cancelled) openDocument({ file, id: saved.id, pages: null }, false);
       })
-      .catch(() => localStorage.removeItem(STORAGE_KEY));
+      .catch(async () => {
+        const restored = await restoreFromBrowser();
+        if (restored || cancelled) return;
+        localStorage.removeItem(STORAGE_KEY);
+        clearFile();
+      });
     return () => {
       cancelled = true;
     };
@@ -604,14 +615,6 @@ function App() {
 
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-6 py-4 text-xs text-subtle">
         <span>PDF Workbench · Your files stay on your own server and are deleted automatically.</span>
-        <span className="inline-flex items-center gap-2" role="status">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              backendUp === null ? "bg-subtle" : backendUp ? "bg-emerald-500" : "bg-danger"
-            }`}
-          />
-          {backendUp === null ? "Checking backend…" : backendUp ? "Backend connected" : "Backend offline"}
-        </span>
       </footer>
     </div>
   );
